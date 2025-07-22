@@ -14,66 +14,29 @@ from typing import Dict, List, Any, Optional
 from google import genai
 from google.genai import types
 
-from utils.config import Config
+from bot.config import Config
 
 
 class GeminiClient:
     """Cliente para integração com Google Gemini 2.5"""
     
-    def __init__(self):
+    def __init__(self, config: Config):
         self.logger = logging.getLogger(__name__)
+        self.config = config
         
         # Inicializar cliente Gemini
         try:
-            self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
+            self.client = genai.Client(api_key=self.config.gemini_api_key)
             self.logger.info("✅ Cliente Gemini inicializado com sucesso")
         except Exception as e:
             self.logger.error(f"❌ Erro ao inicializar cliente Gemini: {e}")
             raise
         
         # Prompt de sistema especializado em concursos
-        self.prompt_sistema = self._criar_prompt_sistema()
+        self.prompt_sistema = self.config.system_prompt
     
-    def _criar_prompt_sistema(self) -> str:
-        """Cria prompt de sistema especializado em concursos públicos"""
-        return """
-Você é o Oráculo de Concursos, um assistente especializado em concursos públicos brasileiros.
-
-ESPECIALIDADES:
-- Direito Administrativo e Constitucional brasileiro
-- Legislação específica para servidores públicos
-- Regimes jurídicos (estatutário, celetista, militar)
-- Processos de seleção e concursos públicos
-- Princípios da administração pública
-- Direitos e deveres dos servidores
-- Aposentadoria e pensões do serviço público
-- Ética no serviço público
-
-DIRETRIZES DE RESPOSTA:
-1. SEMPRE responda em português brasileiro
-2. Seja preciso e baseie-se na legislação vigente
-3. Cite fontes quando possível (leis, decretos, jurisprudência)
-4. Use linguagem clara e didática
-5. Estruture respostas de forma organizada
-6. Para dúvidas complexas, divida em tópicos
-7. Indique quando uma informação pode estar desatualizada
-
-ESTRATÉGIA ANTI-ALUCINAÇÃO:
-- Só responda se tiver 90%+ de certeza da informação
-- Em caso de dúvida, indique explicitamente
-- Diferencie entre "lei vigente" e "interpretação doutrinária"
-- Sempre que possível, cite o número da lei/artigo específico
-
-FORMATO DE RESPOSTA:
-- Use emojis relevantes para destacar pontos importantes
-- Organize em tópicos quando necessário
-- Termine sempre com uma orientação prática
-
-Se não tiver certeza sobre uma informação, seja honesto e recomende consultar fontes oficiais.
-"""
-    
-    async def gerar_resposta_concurso(self, pergunta: str, contexto: Dict[str, Any], 
-                                     usuario_id: str) -> Dict[str, Any]:
+    async def gerar_resposta_concurso(self, pergunta: str, contexto: Dict[str, Any>, 
+                                     usuario_id: str) -> Dict[str, Any>:
         """
         Gera resposta especializada em concursos públicos
         
@@ -105,7 +68,7 @@ Se não tiver certeza sobre uma informação, seja honesto e recomende consultar
             self.logger.error(f"❌ Erro ao gerar resposta: {e}")
             raise
     
-    def _formatar_contexto(self, contexto: Dict[str, Any]) -> str:
+    def _formatar_contexto(self, contexto: Dict[str, Any>) -> str:
         """Formata contexto da conversa para o Gemini"""
         if not contexto.get('historico'):
             return ""
@@ -136,7 +99,7 @@ Inclua fontes legais sempre que possível e seja explícito sobre o nível de co
         """Faz requisição ao Gemini"""
         try:
             response = self.client.models.generate_content(
-                model="gemini-2.5-pro",
+                model=self.config.default_model,
                 contents=[
                     types.Content(
                         role="user", 
@@ -147,7 +110,7 @@ Inclua fontes legais sempre que possível e seja explícito sobre o nível de co
                     temperature=0.1,  # Baixa temperatura para respostas mais precisas
                     top_p=0.8,
                     top_k=40,
-                    max_output_tokens=2048,
+                    max_output_tokens=self.config.max_response_length,
                     safety_settings=[
                         types.SafetySetting(
                             category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -167,7 +130,7 @@ Inclua fontes legais sempre que possível e seja explícito sobre o nível de co
             self.logger.error(f"❌ Erro na requisição Gemini: {e}")
             raise
     
-    def _processar_resposta(self, response: Any) -> Dict[str, Any]:
+    def _processar_resposta(self, response: Any) -> Dict[str, Any>:
         """Processa resposta do Gemini"""
         if not response or not response.text:
             raise ValueError("Resposta vazia do Gemini")
@@ -184,7 +147,7 @@ Inclua fontes legais sempre que possível e seja explícito sobre o nível de co
             'resposta': resposta_texto,
             'confianca': confianca,
             'fontes': fontes,
-            'modelo_usado': 'gemini-2.5-pro',
+            'modelo_usado': self.config.default_model,
             'timestamp': self._obter_timestamp()
         }
     
