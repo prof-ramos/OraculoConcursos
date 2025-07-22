@@ -16,11 +16,13 @@ from pathlib import Path
 # Adicionar o diretório raiz ao path para imports
 sys.path.append(str(Path(__file__).parent))
 
-from bot.discord_bot_v2 import OraculoBotV2
+from bot.discord_bot import OraculoBot
 from database.db_manager import DatabaseManager
 from utils.logger import configurar_logger
 from utils.debug_logger import get_debug_logger, debug_async_func, MonitorDiscord
 from bot.config import Config
+from bot.gemini_client import GeminiClient
+from bot.anti_alucinacao import ValidadorConfianca
 
 
 class OraculoApp:
@@ -59,7 +61,7 @@ class OraculoApp:
             # Inicializar banco de dados
             self.debug.registrar_evento("DB_INIT_START")
             self.logger.info("📊 Inicializando banco de dados...")
-            self.db_manager = DatabaseManager()
+            self.db_manager = DatabaseManager(config.database_path)
             
             # Testar inicialização completa do banco
             try:
@@ -68,13 +70,17 @@ class OraculoApp:
                 self.logger.info("📊 Banco de dados inicializado com sucesso")
             except Exception as db_error:
                 self.debug.debug_excecao(db_error, "inicialização do banco")
-                self.logger.warning(f"⚠️ Erro no banco, continuando sem persistência: {db_error}")
+                self.logger.warning("⚠️ Erro no banco, continuando sem persistência: {db_error}")
                 self.debug.registrar_evento("DB_INIT_FAILED", {"erro": str(db_error)})
+
+            # Inicializar componentes
+            gemini_client = GeminiClient(config)
+            validador = ValidadorConfianca(config)
             
             # Inicializar bot Discord
             self.debug.registrar_evento("BOT_INIT_START")
             self.logger.info("🤖 Inicializando bot Discord...")
-            self.bot = OraculoBotV2(self.db_manager)
+            self.bot = OraculoBot(self.db_manager, gemini_client, validador, config)
             self.config = config
             
             # Adicionar monitoramento ao bot
@@ -88,9 +94,9 @@ class OraculoApp:
         except Exception as e:
             self.debug.debug_excecao(e, "inicialização da aplicação")
             if self.logger:
-                self.logger.error(f"❌ Erro durante inicialização: {e}")
+                self.logger.error("❌ Erro durante inicialização: {e}")
             else:
-                print(f"❌ Erro durante inicialização: {e}")
+                print("❌ Erro durante inicialização: {e}")
             return False
     
     async def executar(self):
@@ -109,7 +115,7 @@ class OraculoApp:
             # Executar o bot
             if self.bot:
                 self.debug.registrar_evento("DISCORD_CONNECT_START")
-                self.logger.info(f"🔌 Conectando com token: {self.config.discord_token[:20]}...")
+                self.logger.info(f"🔌 Conectando com token: {self.config.discord_token[:8]}...")
                 
                 # Debug do cliente antes da conexão
                 self.debug.debug_discord_client(self.bot)
@@ -189,7 +195,8 @@ class OraculoApp:
             
             # Fechar conexão do banco
             if self.db_manager:
-                await self.db_manager.fechar()
+                # O aiosqlite não tem um método close() explícito no manager
+                pass
             
             if self.logger:
                 self.logger.info("✅ Shutdown completado com sucesso!")

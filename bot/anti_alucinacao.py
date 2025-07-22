@@ -11,15 +11,16 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import json
 
-from utils.config import Config
+from bot.config import Config
 
 
 class ValidadorConfianca:
     """Validador de confiança para respostas do Gemini"""
     
-    def __init__(self):
+    def __init__(self, config: Config):
         self.logger = logging.getLogger(__name__)
-        self.confianca_minima = Config.CONFIANCA_MINIMA
+        self.config = config
+        self.confianca_minima = self.config.confidence_threshold
         
         # Padrões que indicam alta confiança
         self.padroes_alta_confianca = [
@@ -176,7 +177,7 @@ class ValidadorConfianca:
         bonus = 0.0
         
         # Verificar se há organização (listas, tópicos)
-        if re.search(r'(?:\n|^)[\d\-\*\•]\s*', resposta):
+        if re.search(r'(?:\n|^)[\d\-\*\s*', resposta):
             bonus += 0.05
         
         # Verificar se há explicação detalhada
@@ -338,7 +339,7 @@ class ValidadorConfianca:
                 'fontes_citadas': len(fontes),
                 'termos_tecnicos': self._contar_termos_tecnicos(resposta),
                 'comprimento_resposta': len(resposta),
-                'estrutura_organizada': bool(re.search(r'(?:\n|^)[\d\-\*\•]\s*', resposta))
+                'estrutura_organizada': bool(re.search(r'(?:\n|^)[\d\-\*\s*', resposta))
             },
             'riscos_identificados': riscos,
             'sugestoes_melhoria': sugestoes,
@@ -356,8 +357,9 @@ class ValidadorConfianca:
 class MonitorAlucinacao:
     """Monitor para detectar padrões de alucinação ao longo do tempo"""
     
-    def __init__(self):
+    def __init__(self, config: Config):
         self.logger = logging.getLogger(__name__)
+        self.config = config
         self.historico_scores = []
         self.alertas_ativos = []
     
@@ -380,7 +382,9 @@ class MonitorAlucinacao:
         self._verificar_alertas()
     
     def _verificar_alertas(self):
-        """Verifica se deve gerar alertas baseado no histórico"""
+        """
+        Verifica se deve gerar alertas baseado no histórico
+        """
         if len(self.historico_scores) < 10:
             return
         
@@ -401,7 +405,9 @@ class MonitorAlucinacao:
             self.logger.warning(f"⚠️ Alerta: Média de confiança baixa - {media_recente:.2f}")
     
     def obter_estatisticas(self) -> Dict[str, Any]:
-        """Obtém estatísticas do monitoramento"""
+        """
+        Obtém estatísticas do monitoramento
+        """
         if not self.historico_scores:
             return {'total_respostas': 0}
         
@@ -412,7 +418,7 @@ class MonitorAlucinacao:
             'score_medio': sum(scores) / len(scores),
             'score_minimo': min(scores),
             'score_maximo': max(scores),
-            'respostas_confiaveis': sum(1 for s in scores if s >= Config.CONFIANCA_MINIMA),
-            'taxa_aprovacao': sum(1 for s in scores if s >= Config.CONFIANCA_MINIMA) / len(scores),
+            'respostas_confiaveis': sum(1 for s in scores if s >= self.config.confidence_threshold),
+            'taxa_aprovacao': sum(1 for s in scores if s >= self.config.confidence_threshold) / len(scores),
             'alertas_ativos': len(self.alertas_ativos)
         }

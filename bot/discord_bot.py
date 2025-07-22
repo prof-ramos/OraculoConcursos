@@ -16,14 +16,14 @@ from discord.ext import commands
 
 from bot.gemini_client import GeminiClient
 from database.db_manager import DatabaseManager
-from utils.anti_alucinacao import ValidadorConfianca
+from bot.anti_alucinacao import ValidadorConfianca
 from bot.config import Config
 
 
 class OraculoBot(commands.Bot):
     """Bot principal do Oráculo de Concursos"""
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, gemini_client: GeminiClient, validador: ValidadorConfianca, config: Config):
         # Configurar intents necessários
         intents = discord.Intents.default()
         intents.message_content = True  # Necessário para ler conteúdo das mensagens
@@ -38,11 +38,10 @@ class OraculoBot(commands.Bot):
         )
         
         self.db_manager = db_manager
+        self.gemini_client = gemini_client
+        self.validador = validador
+        self.config = config
         self.logger = logging.getLogger(__name__)
-        
-        # Inicializar componentes depois da conexão para evitar bloqueios
-        self.gemini_client = None
-        self.validador = None
         
         # Cache de contexto de conversas ativas
         self.contextos_ativos: Dict[str, Dict[str, Any]] = {}
@@ -58,13 +57,6 @@ class OraculoBot(commands.Bot):
     async def setup_hook(self):
         """Configurações iniciais do bot"""
         self.logger.info("🔧 Configurando hooks do bot...")
-        
-        # Desabilitar sincronização de comandos por enquanto para testar
-        # try:
-        #     await self.tree.sync()
-        #     self.logger.info("✅ Comandos sincronizados com Discord")
-        # except Exception as e:
-        #     self.logger.warning(f"⚠️ Erro ao sincronizar comandos: {e}")
     
     async def on_ready(self):
         """Evento chamado quando o bot está pronto"""
@@ -74,18 +66,6 @@ class OraculoBot(commands.Bot):
         # Log de debug para servidores
         for guild in self.guilds:
             self.logger.info(f"📋 Servidor: {guild.name} (ID: {guild.id})")
-        
-        # Inicializar componentes após conexão
-        try:
-            self.logger.info("🔧 Inicializando Gemini Client...")
-            self.gemini_client = GeminiClient()
-            
-            self.logger.info("🛡️ Inicializando Validador de Confiança...")
-            self.validador = ValidadorConfianca()
-            
-            self.logger.info("✅ Todos os componentes inicializados")
-        except Exception as e:
-            self.logger.error(f"❌ Erro ao inicializar componentes: {e}")
         
         # Configurar status do bot
         activity = discord.Activity(
@@ -121,11 +101,6 @@ class OraculoBot(commands.Bot):
     async def _processar_mencao(self, message: discord.Message):
         """Processa menção ao bot"""
         self.logger.info(f"💬 Processando menção de {message.author} em #{message.channel}")
-        
-        # Verificar se componentes estão inicializados
-        if not self.gemini_client or not self.validador:
-            await message.reply("⚠️ Bot ainda inicializando, tente novamente em alguns segundos.")
-            return
         
         # Extrair texto da mensagem removendo menção
         texto_limpo = self._limpar_mencao(message.content)
